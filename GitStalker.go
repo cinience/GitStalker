@@ -67,6 +67,45 @@ func command(name string, args ...interface{}) *exec.Cmd {
 	return c
 }
 
+func action(key, fullname string) {
+	repoDir := key + "/" + fullname
+	repoInfo := strings.Split(fullname, "/")
+	repoUser := repoInfo[0]
+	repoName := repoInfo[1]
+
+	exitCode := 0
+	_, err := os.Stat(repoDir+"/.git")
+	if err == nil {
+		os.Chdir(repoDir)
+		log.Printf("repo '%s' already exists, try update.\n", repoDir)
+		c := command("git", "pull")
+		if err := c.Run(); err != nil {
+			log.Println(err)
+		}
+		return
+	}
+
+	if err := os.MkdirAll(repoDir, os.ModePerm); err != nil {
+		log.Fatalln(err)
+	}
+
+	url := fmt.Sprintf("https://github.com/%s/%s.git", repoUser, repoName)
+	log.Printf("git clone %s into %s", url, repoDir)
+	c := command("git", "clone", url, repoDir)
+	if err := c.Run(); err != nil {
+		if exiterr, ok := err.(*exec.ExitError); ok {
+			if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+				exitCode = status.ExitStatus()
+			}
+		}
+		log.Printf("close %s failed, exit code %d, err: %v\n", repoDir, exitCode, err)
+		_, err = os.Stat(repoDir)
+		if err != nil {
+			os.RemoveAll(repoDir)
+		}
+	}
+}
+
 func main() {
 	flag.Parse()
 	if len(*username) == 0 {
@@ -84,6 +123,7 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
+	log.Println(pwd)
 
 	for _, key := range keyword {
 		items, err := repos(key)
@@ -93,46 +133,7 @@ func main() {
 
 		for _, fullname := range items {
 			os.Chdir(pwd)
-
-			repoInfo := strings.Split(fullname, "/")
-			repoUser := repoInfo[0]
-			repoName := repoInfo[1]
-
-			if err := os.Mkdir(key, os.ModePerm); err != nil && !os.IsExist(err) {
-				log.Fatalln(err)
-			}
-			os.Chdir(key)
-
-			if err := os.Mkdir(repoUser, os.ModePerm); err != nil && !os.IsExist(err) {
-				log.Fatalln(err)
-			}
-			os.Chdir(repoUser)
-
-			exitCode := 0
-			_, err = os.Stat(repoName)
-			if err == nil {
-				os.Chdir(repoName)
-				log.Printf("repo '%s' already exists, try update.\n", repoInfo)
-				c := command("git", "pull")
-				if err := c.Run(); err != nil {
-					log.Println(err)
-				}
-				continue
-			}
-
-			url := fmt.Sprintf("https://github.com/%s/%s.git", repoUser, repoName)
-			log.Printf("git clone %s", url)
-			c := command("git", "clone", url)
-			if err := c.Run(); err != nil {
-				if exiterr, ok := err.(*exec.ExitError); ok {
-					if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-						exitCode = status.ExitStatus()
-					}
-				}
-				log.Println(err)
-				log.Printf("exit code %d\n", exitCode)
-			}
-
+			go action(key, fullname)
 		}
 	}
 
