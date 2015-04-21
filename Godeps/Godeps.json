@@ -1,0 +1,10 @@
+{
+	"ImportPath": "github.com/nareix/curl",
+	"GoVersion": "go1.4.1",
+	"Deps": [
+		{
+			"ImportPath": "github.com/nareix/curl",
+			"Rev": "d1b02f168dccd6f70100d8c3926fb97c709b21da"
+		}
+	]
+}
